@@ -37,7 +37,7 @@ jobs:
               - InferenceSystem/**
               - .github/workflows/InferenceSystem.yaml
 
-  # Phase 1 of #437: fast, deterministic component tests (no live HLS).
+  # Perform fast, deterministic component tests (no live HLS).
   inference-component-test:
     name: Component tests (${{ matrix.os }})
     strategy:
