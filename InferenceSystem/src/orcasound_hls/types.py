@@ -8,7 +8,6 @@ metadata.  No I/O happens at construction time; call ``download_as_wav`` /
 from __future__ import annotations
 
 import os
-import shutil
 import time
 import urllib.error
 import urllib.request
@@ -148,16 +147,18 @@ class OrcasoundHLSSegment:
     def _concat_and_convert(
         self, ts_dir: str, filenames: List[str], out_path: str
     ) -> str:
-        """Concatenate .ts files then convert with ffmpeg to *out_path*."""
-        concat_path = os.path.join(ts_dir, self.name + ".ts")
-        with open(concat_path, "wb") as out:
+        """Concatenate validated .ts files and convert with ffmpeg."""
+        concat_path = os.path.join(ts_dir, "concat.txt")
+        with open(concat_path, "w", encoding="utf-8") as manifest:
             for fname in filenames:
-                with open(os.path.join(ts_dir, fname), "rb") as inp:
-                    shutil.copyfileobj(inp, out)
+                path = os.path.abspath(os.path.join(ts_dir, fname))
+                escaped_path = path.replace("'", "'\\''")
+                manifest.write(f"file '{escaped_path}'\n")
 
         stream = ffmpeg.input(
             concat_path,
-            f="mpegts",
+            f="concat",
+            safe=0,
             err_detect="ignore_err",
             fflags="+genpts",
         )
