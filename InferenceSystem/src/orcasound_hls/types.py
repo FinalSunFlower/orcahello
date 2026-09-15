@@ -105,7 +105,12 @@ class OrcasoundHLSSegment:
 
         stream = ffmpeg.input(concat_path)
         stream = ffmpeg.output(stream, out_path)
-        ffmpeg.run(stream, quiet=True, overwrite_output=True)
+        try:
+            ffmpeg.run(stream, quiet=True, overwrite_output=True)
+        except ffmpeg.Error as exc:
+            stderr = (exc.stderr or b"").decode(errors="replace").strip()
+            detail = f": {stderr}" if stderr else ""
+            raise RuntimeError(f"ffmpeg conversion failed{detail}") from exc
         return out_path
 
     def download_as_wav(self, dest_dir: str) -> str:
