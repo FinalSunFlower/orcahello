@@ -155,7 +155,12 @@ class OrcasoundHLSSegment:
                 with open(os.path.join(ts_dir, fname), "rb") as inp:
                     shutil.copyfileobj(inp, out)
 
-        stream = ffmpeg.input(concat_path)
+        stream = ffmpeg.input(
+            concat_path,
+            f="mpegts",
+            err_detect="ignore_err",
+            fflags="+genpts",
+        )
         stream = ffmpeg.output(stream, out_path)
         try:
             ffmpeg.run(stream, quiet=True, overwrite_output=True)
@@ -163,6 +168,8 @@ class OrcasoundHLSSegment:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
             detail = f": {stderr}" if stderr else ""
             raise RuntimeError(f"ffmpeg conversion failed{detail}") from exc
+        if not os.path.isfile(out_path) or os.path.getsize(out_path) <= 44:
+            raise RuntimeError("ffmpeg conversion produced an empty output file")
         return out_path
 
     def download_as_wav(self, dest_dir: str) -> str:
