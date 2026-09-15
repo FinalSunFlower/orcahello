@@ -210,6 +210,7 @@ jobs:
       - name: Install FFmpeg (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
+          # TODO: Re-evaluate setup-ffmpeg on Ubuntu when https://github.com/FedericoCarboni/setup-ffmpeg/issues/35 is resolved and revalidated
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
