@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -22,6 +24,8 @@ from pytz import timezone as pytz_tz
 FOLDER_TO_AUDIO_OFFSET = 2.0
 
 HLS_DOWNLOAD_TIMEOUT_S = 30
+HLS_DOWNLOAD_RETRIES = 3
+MPEGTS_PACKET_SIZE = 188
 
 
 @dataclass(frozen=True)
@@ -88,8 +92,56 @@ class OrcasoundHLSSegment:
             fname = os.path.basename(url)
             dest = os.path.join(dest_dir, fname)
             if not os.path.isfile(dest):
-                with urllib.request.urlopen(url, timeout=HLS_DOWNLOAD_TIMEOUT_S) as resp, open(dest, "wb") as out:
-                    shutil.copyfileobj(resp, out)
+                part = dest + ".part"
+                last_error: Exception | None = None
+                for attempt in range(1, HLS_DOWNLOAD_RETRIES + 1):
+                    try:
+                        with urllib.request.urlopen(
+                            url, timeout=HLS_DOWNLOAD_TIMEOUT_S
+                        ) as resp, open(part, "wb") as out:
+                            expected_size = resp.headers.get("Content-Length")
+                            expected_size = (
+                                int(expected_size) if expected_size else None
+                            )
+                            size = 0
+                            while chunk := resp.read(1024 * 1024):
+                                out.write(chunk)
+                                size += len(chunk)
+                            out.flush()
+
+                        if expected_size is not None and size != expected_size:
+                            raise IOError(
+                                f"incomplete download ({size} of {expected_size} bytes)"
+                            )
+                        with open(part, "rb") as check:
+                            header = check.read(MPEGTS_PACKET_SIZE * 3)
+                        if (
+                            not header
+                            or header[0] != 0x47
+                            or any(
+                                header[offset] != 0x47
+                                for offset in range(
+                                    MPEGTS_PACKET_SIZE,
+                                    len(header),
+                                    MPEGTS_PACKET_SIZE,
+                                )
+                            )
+                        ):
+                            raise IOError("downloaded file is not valid MPEG-TS")
+                        os.replace(part, dest)
+                        break
+                    except (OSError, urllib.error.URLError, ValueError) as exc:
+                        last_error = exc
+                        try:
+                            os.remove(part)
+                        except FileNotFoundError:
+                            pass
+                        if attempt < HLS_DOWNLOAD_RETRIES:
+                            time.sleep(0.5 * attempt)
+                else:
+                    raise RuntimeError(
+                        f"failed to download complete HLS segment {url}: {last_error}"
+                    ) from last_error
             filenames.append(fname)
         return filenames
 
